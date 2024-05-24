@@ -107,6 +107,7 @@ ActionObservedCostClient::send_response(
   const plansys2_msgs::msg::ActionExecution::SharedPtr msg)
 {
   RCLCPP_INFO(get_logger(), "ActionObservedCostClient::send_response");
+  RCLCPP_INFO(get_logger(), "NOMINAL ACTION COST: %f", action_cost_->nominal_cost);
   plansys2_msgs::msg::ActionExecution msg_resp(*msg);
   msg_resp.type = plansys2_msgs::msg::ActionExecution::RESPONSE;
   msg_resp.node_id = get_name();
@@ -129,8 +130,8 @@ ActionObservedCostClient::send_response(
   data_collection_ptr_ -> action_execution = msg_resp;
 
   data_collection_ptr_ -> nominal_action_cost = *action_cost_;
-  data_collection_ptr_ -> estimated_action_cost = msg_resp.action_cost;
-  \
+  data_collection_ptr_ -> estimated_action_cost.nominal_cost = msg_resp.action_cost.nominal_cost;
+  data_collection_ptr_ -> estimated_action_cost.std_dev_cost = msg_resp.action_cost.std_dev_cost;
   // plansys2::msg::ActionExecutionDataCollection data_collection;
   // data_collection.action_execution = *msg_resp;
 
