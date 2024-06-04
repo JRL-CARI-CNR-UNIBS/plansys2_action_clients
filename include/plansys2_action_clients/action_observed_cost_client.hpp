@@ -16,10 +16,16 @@
 #define PLANSYS2_ACTIONS_CLIENTS__ACTION_OBSERVER_COST_CLIENT_HPP_
 
 #include <memory>
+#include <fstream>
+#include <regex>
+#include <filesystem>
+#include <time.h>
 
 #include "plansys2_executor/ActionExecutorClient.hpp"
 #include "plansys2_msgs/msg/action_execution_data_collection.hpp"
 #include "state_observers/luenberger.hpp"
+#include "state_observers/kalman_filter.hpp"
+#include "state_observers/state_observer.hpp"
 
 namespace plansys2_actions_clients
 {
@@ -34,20 +40,33 @@ public:
 
   // void finish(bool success, float completion, const std::string & status) override;
   void finish(bool success, float completion, const std::string & status, const double measured_action_cost);
-
   // void set_action_cost(const ActionCostPtr & action_cost,
   //                       const plansys2_msgs::msg::ActionExecution::SharedPtr msg);
         
 protected:
-  std::map<std::string, std::shared_ptr<state_observer::Luenberger>> observed_action_cost_;
+  std::map<std::string, std::shared_ptr<state_observer::StateObserver>> observed_action_cost_;
   void send_response(const plansys2_msgs::msg::ActionExecution::SharedPtr msg) override;
   std::string get_arguments_hash();
+  void update_fluents(const std::vector<double> & fluents_value);
 
 private:
+  // data collections
   using ActionExecutionDataCollection = plansys2_msgs::msg::ActionExecutionDataCollection;
   using ActionExecutionDataCollectionPtr = std::shared_ptr<ActionExecutionDataCollection>;
   ActionExecutionDataCollectionPtr data_collection_ptr_;
   rclcpp::Publisher<ActionExecutionDataCollection>::SharedPtr data_collection_pub_;
+  std::shared_ptr<plansys2::ProblemExpertClient> problem_expert_;
+  std::shared_ptr<plansys2::DomainExpertClient> domain_expert_;
+
+  // parameters
+  bool save_updated_action_cost_;
+  std::vector<std::string> fluent_to_update_;
+  std::vector<long int> fluent_args_;
+
+  bool is_valid_path(const std::string& path_str);
+  std::string updated_fluents_path_;
+  std::string updated_problem_path_;
+
   // plansys2::msg::ActionExecutionDataCollectionPtr data_collection_;
 };
 
