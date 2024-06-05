@@ -47,7 +47,7 @@ protected:
   std::map<std::string, std::shared_ptr<state_observer::StateObserver>> observed_action_cost_;
   void send_response(const plansys2_msgs::msg::ActionExecution::SharedPtr msg) override;
   std::string get_arguments_hash();
-  void update_fluents(const std::vector<double> & fluents_value);
+  std::string update_fluent(const double & fluents_value);
 
 private:
   // data collections
@@ -59,15 +59,17 @@ private:
   std::shared_ptr<plansys2::DomainExpertClient> domain_expert_;
 
   // parameters
-  bool save_updated_action_cost_;
-  std::vector<std::string> fluent_to_update_;
+  bool save_updated_action_cost_, update_fluents_;
+  std::string fluent_to_update_;  // In future could be a vector of fluents
   std::vector<long int> fluent_args_;
 
-  bool is_valid_path(const std::string& path_str);
   std::string updated_fluents_path_;
   std::string updated_problem_path_;
+  bool is_valid_path(const std::string& path_str);
+  void save_updated_fluent(const std::string & updated_fluent);
+  void save_updated_problem(const std::string & updated_problem);
 
-  // plansys2::msg::ActionExecutionDataCollectionPtr data_collection_;
+ // plansys2::msg::ActionExecutionDataCollectionPtr data_collection_;
 };
 
 }  // namespace plansys2_actions_clients
