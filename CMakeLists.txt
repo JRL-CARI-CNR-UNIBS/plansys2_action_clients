@@ -55,8 +55,8 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_include_directories(include)
-ament_export_dependencies(${dependencies})
 ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(${dependencies})
 # ament_export_targets(
 #   ${PROJECT_NAME}
 #   HAS_LIBRARY_TARGET

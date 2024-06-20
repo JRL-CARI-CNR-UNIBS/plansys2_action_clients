@@ -44,10 +44,17 @@ public:
   //                       const plansys2_msgs::msg::ActionExecution::SharedPtr msg);
         
 protected:
+  std::map<std::string, std::vector<std::string>> associated_arguments_;
   std::map<std::string, std::shared_ptr<state_observer::StateObserver>> observed_action_cost_;
   void send_response(const plansys2_msgs::msg::ActionExecution::SharedPtr msg) override;
   std::string get_arguments_hash();
   std::string update_fluent(const double & fluents_value);
+  bool should_execute(const std::string & action, const std::vector<std::string> & args);
+  
+  // using CallbackReturnT =
+  //   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+   on_configure(const rclcpp_lifecycle::State & state);
 
 private:
   // data collections
@@ -69,6 +76,7 @@ private:
   void save_updated_fluent(const std::string & updated_fluent);
   void save_updated_problem(const std::string & updated_problem);
 
+  
  // plansys2::msg::ActionExecutionDataCollectionPtr data_collection_;
 };
 

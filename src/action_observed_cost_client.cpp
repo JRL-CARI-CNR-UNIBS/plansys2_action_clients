@@ -24,8 +24,10 @@ ActionObservedCostClient::ActionObservedCostClient(
     data_collection_pub_ = create_publisher<plansys2_msgs::msg::ActionExecutionDataCollection>(
       "/action_execution_data_collection", 10);
     
-    problem_expert_ = std::make_shared<plansys2::ProblemExpertClient>(); 
-    domain_expert_ = std::make_shared<plansys2::DomainExpertClient>();
+    problem_expert_ = std::make_shared<plansys2::ProblemExpertClient>(get_name()); 
+    domain_expert_ = std::make_shared<plansys2::DomainExpertClient>(get_name());
+    
+
     auto fully_declare_parameter = [&](const std::string& param_name, auto default_val, auto type,
                                     const std::string& description) -> auto
     {
@@ -68,8 +70,54 @@ ActionObservedCostClient::ActionObservedCostClient(
     update_fluents_ = true;
     fluent_to_update_ = "move_duration";
     fluent_args_ = {0,1,2};
+    RCLCPP_INFO(get_logger(), "I have specialized args %d", specialized_arguments_.size());
+
+    // auto action_name = get_action_name();
+    // std::vector<std::string> domain_durative_actions = domain_expert_->getDurativeActions();
+    // std::vector<std::string> domain_actions = domain_expert_->getActions();
+    
+    // if(domain_durative_actions.find(action_name) != domain_durative_actions.end()) {
+    //   auto durative_action = domain_expert_->getDurativeAction(action_name, get_arguments());
+    //   for(const auto & param : durative_action->parameters) {
+    //     associated_arguments_[param.name] = {};
+    //   }
+    // }
+    // else if(domain_actions.find(action_name) != domain_actions.end()) {
+    //   auto action = domain_expert_->getAction(action_name, get_arguments());
+    //   for(const auto & param : action->parameters) {
+    //     associated_arguments_[param.name] = {};
+    //   }
+    // }
+    // else {
+    //   RCLCPP_ERROR(get_logger(), "Action %s not found in domain", action_name.c_str());
+    // }
+
+    RCLCPP_INFO(get_logger(), "FINE COSTRUTTORE");
   }
 
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+ActionObservedCostClient::on_configure(const rclcpp_lifecycle::State & state)
+{
+  RCLCPP_INFO(get_logger(), "ONCONFIGURE");
+  RCLCPP_INFO(get_logger(), "TEST");
+  auto return_value = ActionExecutorClient::on_configure(state);
+  RCLCPP_INFO(get_logger(), "TEST");
+
+  RCLCPP_INFO(get_logger(), "N SPEC ARGS: %d", specialized_arguments_.size());
+  for(const auto & arg : specialized_arguments_) {
+  RCLCPP_INFO(get_logger(), "DECLERING arg: %s", arg.c_str());
+  declare_parameter<std::vector<std::string>>(arg, std::vector<std::string>());
+  get_parameter(arg, associated_arguments_[arg]);   
+  }
+  for(const auto & arg : associated_arguments_) {
+  RCLCPP_INFO(get_logger(), "Specialized arg: %s", arg.first.c_str());
+    for(const auto & arg : arg.second) {
+      RCLCPP_INFO(get_logger(), "Spec Arg: %s", arg.c_str());
+    }
+  }
+
+  return return_value;
+}
 std::string
 ActionObservedCostClient::get_arguments_hash()
 {
@@ -363,6 +411,67 @@ ActionObservedCostClient::save_updated_problem(const std::string & updated_probl
 
   // Close the file
   outfile_problem.close();
+}
+
+bool
+ActionObservedCostClient::should_execute(
+  const std::string & action, const std::vector<std::string> & args)
+{
+  if (action != action_managed_) {
+    return false;
+  }
+  RCLCPP_INFO(get_logger(), "Action: %s", get_action_name().c_str()); 
+
+  for(const auto & arg: args)
+  {
+    RCLCPP_INFO(get_logger(), "Arg: %s", arg.c_str());
+  }
+  RCLCPP_INFO(get_logger(), "AQUI");
+  RCLCPP_INFO(get_logger(), "Associated args: %d", associated_arguments_.size());
+  for(const auto& pair: associated_arguments_)
+  {
+    RCLCPP_INFO(get_logger(), "Specialized arg: %s", pair.first.c_str());
+    for(const auto & arg: pair.second)
+    {
+      RCLCPP_INFO(get_logger(), "Spec Arg: %s", arg.c_str());
+    }
+  }
+  if (!specialized_arguments_.empty()) {
+    RCLCPP_INFO(get_logger(), "Here");
+    for(const auto & specialized_arg : specialized_arguments_) {
+      RCLCPP_INFO(get_logger(), "Specialized arg: %s", specialized_arg.c_str());
+      size_t pos = specialized_arg.find("?");
+      RCLCPP_INFO(get_logger(), "Pos: %d", pos);
+      if(pos != std::string::npos) {
+        RCLCPP_INFO(get_logger(), "Found ?");
+        RCLCPP_INFO(get_logger(), "%s", specialized_arg.substr(pos+1));
+        int arg_num = std::stoi(specialized_arg.substr(pos+1));      
+        RCLCPP_INFO(get_logger(), "Arg num: %d", arg_num);
+        if(arg_num < args.size()){
+          RCLCPP_INFO(get_logger(), "Look for %s that arg between:", args[0].c_str());
+          for(const auto & arg : associated_arguments_[specialized_arg]) {
+            RCLCPP_INFO(get_logger(), "Arg: %s", arg.c_str());
+          }
+          if (std::find(associated_arguments_[specialized_arg].begin(), 
+                        associated_arguments_[specialized_arg].end(), 
+                        args[0].c_str()) == associated_arguments_[specialized_arg].end()) {
+            RCLCPP_INFO(get_logger(), "I [%s, %s] am not specialized for this args",
+                        get_name(), get_action_name().c_str());
+            return false;
+          }
+        }
+        else {
+          RCLCPP_INFO(get_logger(), "You specified arg n: %d but the action has n: %d args", arg_num, args.size());
+        }
+      }
+      else {
+        RCLCPP_INFO(get_logger(), "No ? in specialized args");
+      }
+    }
+  }
+  RCLCPP_INFO(get_logger(), "I [%s, %s] am specialized for this args",
+              get_name(), get_action_name().c_str());
+  return true;
 }
 
 }  // namespace plansys2_actions_clients
