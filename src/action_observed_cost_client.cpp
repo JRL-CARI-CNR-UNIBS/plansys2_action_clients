@@ -46,7 +46,7 @@ ActionObservedCostClient::ActionObservedCostClient(
     fully_declare_parameter("updated_problem_path", default_path_updated_problem, rclcpp::PARAMETER_STRING, "Full path where save the updated pddl problem");
 
     fully_declare_parameter("fluent_to_update", "", rclcpp::PARAMETER_STRING, "Fluent to update");
-    fully_declare_parameter("fluent_args", std::vector<long int>(), rclcpp::PARAMETER_INTEGER_ARRAY, "Fluent arguments");
+    fully_declare_parameter("fluent_args", std::vector<int>(), rclcpp::PARAMETER_INTEGER_ARRAY, "Fluent arguments");
 
     get_parameter("save_updated_action_cost", save_updated_action_cost_);
     get_parameter("updated_fluents_path", updated_fluents_path_);
@@ -177,15 +177,34 @@ ActionObservedCostClient::finish(bool success,
     RCLCPP_INFO(get_logger(), "State %f", observed_action_cost_[arguments_hash]->get_state()[0]);
     RCLCPP_INFO(get_logger(), "Output %f", observed_action_cost_[arguments_hash]->get_output()[0]);
   }
+  RCLCPP_INFO(get_logger(), "Updated observer");
 
   std::string updated_fluent = "";
   if(update_fluents_) {
+    RCLCPP_INFO(get_logger(), "Update fluents");
+    // check if arguments_hash is in observed_action_cost_
+    if(observed_action_cost_.find(arguments_hash) == observed_action_cost_.end()) {
+      RCLCPP_INFO(get_logger(), "Observer not found for arguments hash %s", arguments_hash.c_str());
+      
+    }
+    //check dim of get_state()
+    RCLCPP_INFO(get_logger(),"dIM %d", observed_action_cost_[arguments_hash]->get_state().size());
+    if(action_cost_)
+    {
+      RCLCPP_INFO(get_logger(), "Action cost %f", action_cost_->nominal_cost);
+    }
+    else
+    {
+      RCLCPP_INFO(get_logger(), "Action cost nullptr");
+    }
     double updated_cost = observed_action_cost_[arguments_hash]->get_state()[0] + action_cost_->nominal_cost;
+    RCLCPP_INFO(get_logger(), "Ready to update cost");
     updated_fluent = update_fluent(updated_cost);
   }
 
 
   if(data_collection_ptr_) {
+    RCLCPP_INFO(get_logger(), "Data collection");
     // measured cost
     data_collection_ptr_->measured_action_cost.nominal_cost = measured_action_cost;
     // residual cost (observer state)
@@ -216,8 +235,9 @@ ActionObservedCostClient::finish(bool success,
     // Save updated fluents to the file
     save_updated_fluent(updated_fluent);
   }
-
+  RCLCPP_INFO(get_logger(), "Send father finish");
   ActionExecutorClient::finish(success, completion, status);
+  RCLCPP_INFO(get_logger(), "End finish");
 }
 
 // void 
@@ -306,9 +326,16 @@ ActionObservedCostClient::update_fluent(const double & fluent_value)
 
   for(const auto & arg : fluent_args_)
   {
-    fluent_string += args[arg] + " ";
+    if (arg < args.size())
+    {
+      fluent_string += args[arg] + " ";
+    }
+    else{
+      RCLCPP_INFO(get_logger(), "Error: arg %d not found in args", arg);
+    }
   }
   fluent_string += ") " + std::to_string(fluent_value) + ")";
+  RCLCPP_INFO(get_logger(), "Update fluent: %s", fluent_string.c_str());
   problem_expert_->updateFunction(plansys2::Function(fluent_string));
   return fluent_string;
 }
