@@ -70,7 +70,6 @@ ActionObservedCostClient::ActionObservedCostClient(
     update_fluents_ = true;
     fluent_to_update_ = "move_duration";
     fluent_args_ = {0,1,2};
-    RCLCPP_INFO(get_logger(), "I have specialized args %d", specialized_arguments_.size());
 
     // auto action_name = get_action_name();
     // std::vector<std::string> domain_durative_actions = domain_expert_->getDurativeActions();
@@ -92,28 +91,16 @@ ActionObservedCostClient::ActionObservedCostClient(
     //   RCLCPP_ERROR(get_logger(), "Action %s not found in domain", action_name.c_str());
     // }
 
-    RCLCPP_INFO(get_logger(), "FINE COSTRUTTORE");
   }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 ActionObservedCostClient::on_configure(const rclcpp_lifecycle::State & state)
 {
-  RCLCPP_INFO(get_logger(), "ONCONFIGURE");
-  RCLCPP_INFO(get_logger(), "TEST");
   auto return_value = ActionExecutorClient::on_configure(state);
-  RCLCPP_INFO(get_logger(), "TEST");
 
-  RCLCPP_INFO(get_logger(), "N SPEC ARGS: %d", specialized_arguments_.size());
   for(const auto & arg : specialized_arguments_) {
-  RCLCPP_INFO(get_logger(), "DECLERING arg: %s", arg.c_str());
-  declare_parameter<std::vector<std::string>>(arg, std::vector<std::string>());
-  get_parameter(arg, associated_arguments_[arg]);   
-  }
-  for(const auto & arg : associated_arguments_) {
-  RCLCPP_INFO(get_logger(), "Specialized arg: %s", arg.first.c_str());
-    for(const auto & arg : arg.second) {
-      RCLCPP_INFO(get_logger(), "Spec Arg: %s", arg.c_str());
-    }
+    declare_parameter<std::vector<std::string>>(arg, std::vector<std::string>());
+    get_parameter(arg, associated_arguments_[arg]);   
   }
 
   return return_value;
@@ -136,7 +123,7 @@ ActionObservedCostClient::finish(bool success,
                                  const std::string & status,
                                  const double measured_action_cost)
 {
-  RCLCPP_INFO(get_logger(), "[ActionObservedCostClient] Action finished: %s", get_action_name());
+  RCLCPP_INFO(get_logger(), "[ActionObservedCostClient] Action finished: %s", get_action_name().c_str());
   RCLCPP_INFO(get_logger(), "[ActionObservedCostClient] Measured action cost %f", measured_action_cost);
   Eigen::VectorXd residual(1);
   if(!action_cost_) {
@@ -299,14 +286,14 @@ ActionObservedCostClient::send_response(
   auto funcs_1 = problem_expert_->getFunctions();
   auto actio = domain_expert_->getActions();
   for(const auto & func : funcs_1) {
-    RCLCPP_INFO(get_logger(), "Function %s", func.name.c_str());
+    // RCLCPP_INFO(get_logger(), "Function %s", func.name.c_str());
     for(const auto & arg : func.parameters) {
-      RCLCPP_INFO(get_logger(), "Parameter %s", arg.name.c_str());
+      // RCLCPP_INFO(get_logger(), "Parameter %s", arg.name.c_str());
     }
-    RCLCPP_INFO(get_logger(), "Value %f", func.value);
+    // RCLCPP_INFO(get_logger(), "Value %f", func.value);
   }
   for(const auto & act : actio) {
-    RCLCPP_INFO(get_logger(), "Action %s", act.c_str());
+    // RCLCPP_INFO(get_logger(), "Action %s", act.c_str());
   }
   // auto domain = domain_expert_->getDomain();
   // RCLCPP_INFO(get_logger(), "Domain %s", domain.c_str());
@@ -449,36 +436,12 @@ ActionObservedCostClient::should_execute(
   }
   RCLCPP_INFO(get_logger(), "Action: %s", get_action_name().c_str()); 
 
-  for(const auto & arg: args)
-  {
-    RCLCPP_INFO(get_logger(), "Arg: %s", arg.c_str());
-  }
-  RCLCPP_INFO(get_logger(), "AQUI");
-  RCLCPP_INFO(get_logger(), "Associated args: %d", associated_arguments_.size());
-  for(const auto& pair: associated_arguments_)
-  {
-    RCLCPP_INFO(get_logger(), "Specialized arg: %s", pair.first.c_str());
-    for(const auto & arg: pair.second)
-    {
-      RCLCPP_INFO(get_logger(), "Spec Arg: %s", arg.c_str());
-    }
-  }
   if (!specialized_arguments_.empty()) {
-    RCLCPP_INFO(get_logger(), "Here");
     for(const auto & specialized_arg : specialized_arguments_) {
-      RCLCPP_INFO(get_logger(), "Specialized arg: %s", specialized_arg.c_str());
       size_t pos = specialized_arg.find("?");
-      RCLCPP_INFO(get_logger(), "Pos: %d", pos);
       if(pos != std::string::npos) {
-        RCLCPP_INFO(get_logger(), "Found ?");
-        RCLCPP_INFO(get_logger(), "%s", specialized_arg.substr(pos+1));
         int arg_num = std::stoi(specialized_arg.substr(pos+1));      
-        RCLCPP_INFO(get_logger(), "Arg num: %d", arg_num);
         if(arg_num < args.size()){
-          RCLCPP_INFO(get_logger(), "Look for %s that arg between:", args[0].c_str());
-          for(const auto & arg : associated_arguments_[specialized_arg]) {
-            RCLCPP_INFO(get_logger(), "Arg: %s", arg.c_str());
-          }
           if (std::find(associated_arguments_[specialized_arg].begin(), 
                         associated_arguments_[specialized_arg].end(), 
                         args[0].c_str()) == associated_arguments_[specialized_arg].end()) {
