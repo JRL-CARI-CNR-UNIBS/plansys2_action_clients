@@ -206,7 +206,8 @@ ActionObservedCostClient::finish(bool success,
     {
       RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
     }
-    
+    data_collection_ptr_->t_start = ActionExecutorClient::get_start_time();
+    data_collection_ptr_->t_end = now();
     data_collection_pub_->publish(*data_collection_ptr_);
     RCLCPP_INFO(get_logger(), "Published data collection");
   }
