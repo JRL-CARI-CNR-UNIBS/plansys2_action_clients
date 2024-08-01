@@ -67,9 +67,9 @@ ActionObservedCostClient::ActionObservedCostClient(
     get_parameter("fluent_to_update", fluent_to_update_);
     get_parameter("fluent_args", fluent_args_);
     save_updated_action_cost_ = true;
-    update_fluents_ = true;
-    fluent_to_update_ = "move_duration";
-    fluent_args_ = {0,1,2};
+    // update_fluents_ = true;
+    // fluent_to_update_ = "move_duration";
+    // fluent_args_ = {0,1,2};
 
     // auto action_name = get_action_name();
     // std::vector<std::string> domain_durative_actions = domain_expert_->getDurativeActions();
