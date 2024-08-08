@@ -81,10 +81,56 @@ ActionObservedCostClient::ActionObservedCostClient(
 
   get_parameter("fluent_to_update", fluent_to_update_);
   get_parameter("fluent_args", fluent_args_);
+  std::cerr << "HERE! fluent_args_ size: " << fluent_args_.size() << std::endl;
+  for(const auto & arg : fluent_args_) {
+    std::cerr << "HERE! ARG: " << arg << std::endl;
+  }
   save_updated_action_cost_ = true;
-  // update_fluents_ = true;
-  // fluent_to_update_ = "move_duration";
-  // fluent_args_ = {0,1,2};
+
+  fully_declare_parameter(
+    "state_observer_param_plugin", "state_observers::KalmanFilterParam",
+    rclcpp::PARAMETER_STRING,
+    "Plugin for the state observer parameters ROS 2 interface");
+  fully_declare_parameter(
+    "state_observer_plugin", "state_observers::KalmanFilter",
+    rclcpp::PARAMETER_STRING,
+    "Plugin for the state observer");
+  std::string state_observer_param_plugin =
+    get_parameter("state_observer_param_plugin").as_string();
+  state_observer_plugin_name_ = get_parameter("state_observer_plugin").as_string();
+
+  std::cerr << "HERE! PRE PLUGIN fluent_args_ size: " << fluent_args_.size() << std::endl;
+  std::cerr << "HERE! " << std::endl;
+  state_observer_params_loader_.reset(
+    new pluginlib::ClassLoader<state_observer::StateObserverParam>(
+      "state_observers",
+      "state_observer::StateObserverParam"));
+  state_observer_loader_.reset(
+    new pluginlib::ClassLoader<state_observer::StateObserver>(
+      "state_observers",
+      "state_observer::StateObserver"));
+  std::cerr << "HERE! AFTER LOADER" << std::endl;
+  std::cerr << "HERE! PRE LOADER fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  try {
+    state_observer_params_ =
+      state_observer_params_loader_->createSharedInstance(
+      "state_observer::KalmanFilterParam");
+  } catch (pluginlib::PluginlibException & ex) {
+    std::cerr << "The plugin failed to load for some reason. Error: " << ex.what() << std::endl;
+  }
+  std::cerr << "HERE! PARAM LOADED" << std::endl;
+  std::cerr << "HERE! PARAM LOADED fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  if (!state_observer_loader_->isClassAvailable(state_observer_plugin_name_)) {
+    RCLCPP_ERROR(
+      get_logger(), "State Observer Class: %s is not available",
+      state_observer_plugin_name_.c_str());
+    throw std::runtime_error("State Observer Class: %s is not available. Check the plugin name");
+  }
+    std::cerr << "HERE! CLASS AVAILABLE fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  std::cerr << "HERE! CLASS AVAILABLE" << std::endl;
 
   // auto action_name = get_action_name();
   // std::vector<std::string> domain_durative_actions = domain_expert_->getDurativeActions();
@@ -111,12 +157,20 @@ ActionObservedCostClient::ActionObservedCostClient(
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 ActionObservedCostClient::on_configure(const rclcpp_lifecycle::State & state)
 {
+  std::cerr << "HERE! INIZIO ONCONFIGURE fluent_args_ size: " << fluent_args_.size() << std::endl;
+
   auto return_value = ActionExecutorClient::on_configure(state);
 
   for (const auto & arg : specialized_arguments_) {
     declare_parameter<std::vector<std::string>>(arg, std::vector<std::string>());
     get_parameter(arg, associated_arguments_[arg]);
   }
+    std::cerr << "HERE! PRE INITIALIZED fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  state_observer_params_->initialize(shared_from_this());
+      std::cerr << "HERE! POST INITIALIZED fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  std::cerr << "HERE! PARAM INITIALIZED" << std::endl;
 
   return return_value;
 }
@@ -140,6 +194,7 @@ ActionObservedCostClient::finish(
   const std::string & status,
   const double measured_action_cost)
 {
+
   RCLCPP_INFO(
     get_logger(), "[ActionObservedCostClient] Action finished: %s",
     get_action_name().c_str());
@@ -164,20 +219,50 @@ ActionObservedCostClient::finish(
     Eigen::MatrixXd L = Eigen::MatrixXd::Identity(1, 1) * 0.6;
     Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(1, 1) * 1;
     Eigen::MatrixXd R = Eigen::MatrixXd::Identity(1, 1) * 1;
-    std::shared_ptr<state_observer::KalmanFilter> kalman_filter_ptr;
-    std::shared_ptr<state_observer::Luenberger> luenberger_ptr;
+
+    std::shared_ptr<state_observer::StateObserver> state_observer;
+    try {
+      state_observer =
+        state_observer_loader_->createSharedInstance(
+        state_observer_plugin_name_);
+    } catch (pluginlib::PluginlibException & ex) {
+      RCLCPP_ERROR(
+        get_logger(), "The plugin: %s, failed to load for some reason. Error: %s", state_observer_plugin_name_,
+        ex.what());
+      throw std::runtime_error("The plugin failed to load for some reason.");
+    }
+    std::cerr << "HERE! PRE SETTING PARAMETER" << std::endl;
 
     try {
-      luenberger_ptr = std::make_shared<state_observer::Luenberger>(A, B, C, L);
-      kalman_filter_ptr = std::make_shared<state_observer::KalmanFilter>(A, B, C, Q, R);
-    } catch (const std::invalid_argument & e) {
-      RCLCPP_ERROR(get_logger(), "Exception caught in state observer build: %s", e.what());
+      state_observer->set_parameters(
+        state_observer_params_);
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "Exception caught in state observer set_parameters: %s", e.what());
+      throw std::runtime_error("The plugin failed to set parameters.");
     }
-    observed_action_cost_[arguments_hash] = kalman_filter_ptr;
+    std::cerr << "HERE! POST SETTING PARAMETER" << std::endl;
+
+    // std::shared_ptr<state_observer::KalmanFilter> kalman_filter_ptr;
+    // std::shared_ptr<state_observer::Luenberger> luenberger_ptr;
+
+    // try {
+    //   luenberger_ptr = std::make_shared<state_observer::Luenberger>(A, B, C, L);
+    //   kalman_filter_ptr = std::make_shared<state_observer::KalmanFilter>(A, B, C, Q, R);
+    // } catch (const std::invalid_argument & e) {
+    //   RCLCPP_ERROR(get_logger(), "Exception caught in state observer build: %s", e.what());
+    // }
+    observed_action_cost_[arguments_hash] = state_observer;
+    std::cerr << "HERE! pre initialization" << std::endl;
+
     observed_action_cost_[arguments_hash]->initialize(residual);
+    std::cerr << "HERE! POST initialization" << std::endl;
+
     RCLCPP_INFO(get_logger(), "Initialized observer");
   } else {
+    std::cerr << "HERE! pre update" << std::endl;
     observed_action_cost_[arguments_hash]->update(residual);
+    std::cerr << "HERE! POST update" << std::endl;
+
     RCLCPP_INFO(get_logger(), "Updated observer");
     RCLCPP_INFO(get_logger(), "State %f", observed_action_cost_[arguments_hash]->get_state()[0]);
     RCLCPP_INFO(get_logger(), "Output %f", observed_action_cost_[arguments_hash]->get_output()[0]);
@@ -199,10 +284,15 @@ ActionObservedCostClient::finish(
     } else {
       RCLCPP_INFO(get_logger(), "Action cost nullptr");
     }
+
     double updated_cost = observed_action_cost_[arguments_hash]->get_state()[0] +
       action_cost_->nominal_cost;
+    std::cerr << "HERE! pre update fluent, cost: " << updated_cost << std::endl;
     RCLCPP_INFO(get_logger(), "Ready to update cost");
+    std::cerr << "HERE! fluent_args_ size: " << fluent_args_.size() << std::endl;
+
     updated_fluent = update_fluent(updated_cost);
+    std::cerr << "HERE! post update fluent" << std::endl;
   }
 
 
@@ -324,19 +414,32 @@ ActionObservedCostClient::send_response(
 std::string
 ActionObservedCostClient::update_fluent(const double & fluent_value)
 {
+  std::cerr << "HERE! fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  std::cerr << "HERE! update_fluent" << std::endl;
   auto args = get_arguments();
+  std::cerr << "HERE! post get args" << std::endl;
 
   std::string fluent_string = "(= (" + fluent_to_update_ + " ";
-
+  std::cerr << "HERE! pre for" << std::endl;
+  std::cerr << "HERE! fluent_args_ size: " << fluent_args_.size() << std::endl;
   for (const auto & arg : fluent_args_) {
+    std::cerr << "HERE! IN FOR" << std::endl;
+    std::cerr << "HERE! ARG: " << arg << std::endl;
+    std::cerr << "HERE! ARGS SIZE: " << args.size() << std::endl;
     if (arg < args.size()) {
+      std::cerr << "HERE! IN IF" << std::endl;
       fluent_string += args[arg] + " ";
     } else {
+      std::cerr << "HERE! IN ERROR" << std::endl;
       RCLCPP_INFO(get_logger(), "Error: arg %d not found in args", arg);
     }
   }
+  std::cerr << "HERE! PRE TOSTRING" << std::endl;
   fluent_string += ") " + std::to_string(fluent_value) + ")";
   RCLCPP_INFO(get_logger(), "Update fluent: %s", fluent_string.c_str());
+  std::cerr << "HERE! PRE UPDATE FCN" << std::endl;
+
   problem_expert_->updateFunction(plansys2::Function(fluent_string));
   return fluent_string;
 }

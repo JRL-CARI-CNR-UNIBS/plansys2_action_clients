@@ -23,9 +23,10 @@
 
 #include "plansys2_executor/ActionExecutorClient.hpp"
 #include "plansys2_msgs/msg/action_execution_data_collection.hpp"
-#include "state_observers/luenberger.hpp"
-#include "state_observers/kalman_filter.hpp"
 #include "state_observers/state_observer.hpp"
+#include "state_observers_param/state_observer_param.hpp"
+
+#include <pluginlib/class_loader.hpp>
 
 namespace plansys2_actions_clients
 {
@@ -66,6 +67,13 @@ private:
   rclcpp::Publisher<ActionExecutionDataCollection>::SharedPtr data_collection_pub_;
   std::shared_ptr<plansys2::ProblemExpertClient> problem_expert_;
   std::shared_ptr<plansys2::DomainExpertClient> domain_expert_;
+  // state observer stuff
+  std::shared_ptr<pluginlib::ClassLoader<state_observer::StateObserverParam>>
+  state_observer_params_loader_;
+  state_observer::StateObserverParam::SharedPtr state_observer_params_;
+  std::shared_ptr<pluginlib::ClassLoader<state_observer::StateObserver>> state_observer_loader_;
+  std::shared_ptr<state_observer::StateObserver> state_observer_;
+  std::string state_observer_plugin_name_;
 
   // parameters
   bool save_updated_action_cost_, update_fluents_;
