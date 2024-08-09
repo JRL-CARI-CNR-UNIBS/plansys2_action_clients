@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(plansys2_executor REQUIRED)
 find_package(state_observers REQUIRED)
 find_package(plansys2_msgs REQUIRED)
+find_package(pluginlib REQUIRED)
 # find_package(plansys2_actions_cost REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -18,6 +19,7 @@ set(dependencies
     plansys2_executor
     state_observers
     plansys2_msgs
+    pluginlib
     # plansys2_actions_cost
 )
 

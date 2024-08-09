@@ -82,6 +82,44 @@ ActionObservedCostClient::ActionObservedCostClient(
   get_parameter("fluent_to_update", fluent_to_update_);
   get_parameter("fluent_args", fluent_args_);
   save_updated_action_cost_ = true;
+
+
+  fully_declare_parameter(
+    "state_observer_param_plugin", "state_observers::KalmanFilterParam",
+    rclcpp::PARAMETER_STRING,
+    "Plugin for the state observer parameters ROS 2 interface");
+  fully_declare_parameter(
+    "state_observer_plugin", "state_observers::KalmanFilter",
+    rclcpp::PARAMETER_STRING,
+    "Plugin for the state observer");
+  std::string state_observer_param_plugin =
+    get_parameter("state_observer_param_plugin").as_string();
+  state_observer_plugin_name_ = get_parameter("state_observer_plugin").as_string();
+  state_observer_params_loader_.reset(
+    new pluginlib::ClassLoader<state_observer::StateObserverParam>(
+      "state_observers",
+      "state_observer::StateObserverParam"));
+  state_observer_loader_.reset(
+    new pluginlib::ClassLoader<state_observer::StateObserver>(
+      "state_observers",
+      "state_observer::StateObserver"));
+  try {
+    state_observer_params_ =
+      state_observer_params_loader_->createSharedInstance(
+      "state_observer::KalmanFilterParam");
+  } catch (pluginlib::PluginlibException & ex) {
+    std::cerr << "The plugin failed to load for some reason. Error: " << ex.what() << std::endl;
+  }
+  std::cerr << "HERE! PARAM LOADED" << std::endl;
+  std::cerr << "HERE! PARAM LOADED fluent_args_ size: " << fluent_args_.size() << std::endl;
+
+  if (!state_observer_loader_->isClassAvailable(state_observer_plugin_name_)) {
+    RCLCPP_ERROR(
+      get_logger(), "State Observer Class: %s is not available",
+      state_observer_plugin_name_.c_str());
+    throw std::runtime_error("State Observer Class: %s is not available. Check the plugin name");
+  }
+
   // update_fluents_ = true;
   // fluent_to_update_ = "move_duration";
   // fluent_args_ = {0,1,2};
@@ -105,19 +143,21 @@ ActionObservedCostClient::ActionObservedCostClient(
   // else {
   //   RCLCPP_ERROR(get_logger(), "Action %s not found in domain", action_name.c_str());
   // }
-
+  std::cerr << "FLUENT ARGS CONSTRUCTOR SIZE: " << fluent_args_.size() << std::endl;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 ActionObservedCostClient::on_configure(const rclcpp_lifecycle::State & state)
 {
+  std::cerr << "FLUENT ARGS on configure SIZE: " << fluent_args_.size() << std::endl;
+
   auto return_value = ActionExecutorClient::on_configure(state);
 
   for (const auto & arg : specialized_arguments_) {
     declare_parameter<std::vector<std::string>>(arg, std::vector<std::string>());
     get_parameter(arg, associated_arguments_[arg]);
   }
-
+  state_observer_params_->initialize(shared_from_this());
   return return_value;
 }
 std::string
@@ -153,27 +193,50 @@ ActionObservedCostClient::finish(
     residual << measured_action_cost - action_cost_->nominal_cost;
     RCLCPP_INFO(get_logger(), "Residual %f", residual[0]);
   }
-
+  std::cerr << "Residual size: " << residual.size() << std::endl;
   auto arguments_hash = get_arguments_hash();
 
   if (observed_action_cost_.find(arguments_hash) == observed_action_cost_.end()) {
-
-    Eigen::MatrixXd A = Eigen::MatrixXd::Constant(1, 1, 1);
-    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(1, 1);
-    Eigen::MatrixXd C = Eigen::MatrixXd::Constant(1, 1, 1);
-    Eigen::MatrixXd L = Eigen::MatrixXd::Identity(1, 1) * 0.6;
-    Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(1, 1) * 1;
-    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(1, 1) * 1;
-    std::shared_ptr<state_observer::KalmanFilter> kalman_filter_ptr;
-    std::shared_ptr<state_observer::Luenberger> luenberger_ptr;
+    std::shared_ptr<state_observer::StateObserver> state_observer;
+    try {
+      state_observer =
+        state_observer_loader_->createSharedInstance(
+        state_observer_plugin_name_);
+    } catch (pluginlib::PluginlibException & ex) {
+      RCLCPP_ERROR(
+        get_logger(), "The plugin: %s, failed to load for some reason. Error: %s", state_observer_plugin_name_,
+        ex.what());
+      throw std::runtime_error("The plugin failed to load for some reason.");
+    }
+    std::cerr << "HERE! PRE SETTING PARAMETER" << std::endl;
 
     try {
-      luenberger_ptr = std::make_shared<state_observer::Luenberger>(A, B, C, L);
-      kalman_filter_ptr = std::make_shared<state_observer::KalmanFilter>(A, B, C, Q, R);
-    } catch (const std::invalid_argument & e) {
-      RCLCPP_ERROR(get_logger(), "Exception caught in state observer build: %s", e.what());
+      state_observer->set_parameters(
+        state_observer_params_);
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(get_logger(), "Exception caught in state observer set_parameters: %s", e.what());
+      throw std::runtime_error("The plugin failed to set parameters.");
     }
-    observed_action_cost_[arguments_hash] = kalman_filter_ptr;
+
+    // Eigen::MatrixXd A = Eigen::MatrixXd::Constant(1, 1, 1);
+    // Eigen::MatrixXd B = Eigen::MatrixXd::Zero(1, 1);
+    // Eigen::MatrixXd C = Eigen::MatrixXd::Constant(1, 1, 1);
+    // Eigen::MatrixXd L = Eigen::MatrixXd::Identity(1, 1) * 0.6;
+    // Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(1, 1) * 1;
+    // Eigen::MatrixXd R = Eigen::MatrixXd::Identity(1, 1) * 1;
+    // std::shared_ptr<state_observer::KalmanFilter> kalman_filter_ptr;
+    // std::shared_ptr<state_observer::Luenberger> luenberger_ptr;
+
+    // try {
+    //   luenberger_ptr = std::make_shared<state_observer::Luenberger>(A, B, C, L);
+    //   kalman_filter_ptr = std::make_shared<state_observer::KalmanFilter>(A, B, C, Q, R);
+    // } catch (const std::invalid_argument & e) {
+    //   RCLCPP_ERROR(get_logger(), "Exception caught in state observer build: %s", e.what());
+    // }
+    observed_action_cost_[arguments_hash] = state_observer;
+    std::cerr << "INITIALIZE OBSERVER" << std::endl;
+    std::cerr << "RESIDUAL SIZE: " << residual.size() << std::endl;
+    std::cerr << "RESIDUAL: " << residual << std::endl;
     observed_action_cost_[arguments_hash]->initialize(residual);
     RCLCPP_INFO(get_logger(), "Initialized observer");
   } else {
