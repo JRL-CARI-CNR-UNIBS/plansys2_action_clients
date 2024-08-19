@@ -110,8 +110,6 @@ ActionObservedCostClient::ActionObservedCostClient(
   } catch (pluginlib::PluginlibException & ex) {
     std::cerr << "The plugin failed to load for some reason. Error: " << ex.what() << std::endl;
   }
-  std::cerr << "HERE! PARAM LOADED" << std::endl;
-  std::cerr << "HERE! PARAM LOADED fluent_args_ size: " << fluent_args_.size() << std::endl;
 
   if (!state_observer_loader_->isClassAvailable(state_observer_plugin_name_)) {
     RCLCPP_ERROR(
@@ -143,14 +141,11 @@ ActionObservedCostClient::ActionObservedCostClient(
   // else {
   //   RCLCPP_ERROR(get_logger(), "Action %s not found in domain", action_name.c_str());
   // }
-  std::cerr << "FLUENT ARGS CONSTRUCTOR SIZE: " << fluent_args_.size() << std::endl;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 ActionObservedCostClient::on_configure(const rclcpp_lifecycle::State & state)
 {
-  std::cerr << "FLUENT ARGS on configure SIZE: " << fluent_args_.size() << std::endl;
-
   auto return_value = ActionExecutorClient::on_configure(state);
 
   for (const auto & arg : specialized_arguments_) {
@@ -193,7 +188,6 @@ ActionObservedCostClient::finish(
     residual << measured_action_cost - action_cost_->nominal_cost;
     RCLCPP_INFO(get_logger(), "Residual %f", residual[0]);
   }
-  std::cerr << "Residual size: " << residual.size() << std::endl;
   auto arguments_hash = get_arguments_hash();
 
   if (observed_action_cost_.find(arguments_hash) == observed_action_cost_.end()) {
@@ -208,7 +202,6 @@ ActionObservedCostClient::finish(
         ex.what());
       throw std::runtime_error("The plugin failed to load for some reason.");
     }
-    std::cerr << "HERE! PRE SETTING PARAMETER" << std::endl;
 
     try {
       state_observer->set_parameters(
@@ -218,25 +211,7 @@ ActionObservedCostClient::finish(
       throw std::runtime_error("The plugin failed to set parameters.");
     }
 
-    // Eigen::MatrixXd A = Eigen::MatrixXd::Constant(1, 1, 1);
-    // Eigen::MatrixXd B = Eigen::MatrixXd::Zero(1, 1);
-    // Eigen::MatrixXd C = Eigen::MatrixXd::Constant(1, 1, 1);
-    // Eigen::MatrixXd L = Eigen::MatrixXd::Identity(1, 1) * 0.6;
-    // Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(1, 1) * 1;
-    // Eigen::MatrixXd R = Eigen::MatrixXd::Identity(1, 1) * 1;
-    // std::shared_ptr<state_observer::KalmanFilter> kalman_filter_ptr;
-    // std::shared_ptr<state_observer::Luenberger> luenberger_ptr;
-
-    // try {
-    //   luenberger_ptr = std::make_shared<state_observer::Luenberger>(A, B, C, L);
-    //   kalman_filter_ptr = std::make_shared<state_observer::KalmanFilter>(A, B, C, Q, R);
-    // } catch (const std::invalid_argument & e) {
-    //   RCLCPP_ERROR(get_logger(), "Exception caught in state observer build: %s", e.what());
-    // }
     observed_action_cost_[arguments_hash] = state_observer;
-    std::cerr << "INITIALIZE OBSERVER" << std::endl;
-    std::cerr << "RESIDUAL SIZE: " << residual.size() << std::endl;
-    std::cerr << "RESIDUAL: " << residual << std::endl;
     observed_action_cost_[arguments_hash]->initialize(residual);
     RCLCPP_INFO(get_logger(), "Initialized observer");
   } else {
@@ -256,7 +231,6 @@ ActionObservedCostClient::finish(
 
     }
     //check dim of get_state()
-    RCLCPP_INFO(get_logger(), "dIM %d", observed_action_cost_[arguments_hash]->get_state().size());
     if (action_cost_) {
       RCLCPP_INFO(get_logger(), "Action cost %f", action_cost_->nominal_cost);
     } else {
@@ -432,7 +406,6 @@ ActionObservedCostClient::save_updated_fluent(const std::string & updated_fluent
     search_string = match.str(0);
   } else {
     RCLCPP_WARN(get_logger(), "Warning: invalid updated_fluent format.");
-    std::cerr << "Errore: formato di updated_fluent non valido." << std::endl;
     return;
   }
   RCLCPP_INFO(get_logger(), "Search string: %s", search_string.c_str());
