@@ -92,7 +92,7 @@ ActionObservedCostClient::ActionObservedCostClient(
     "state_observer_plugin", "state_observers::KalmanFilter",
     rclcpp::PARAMETER_STRING,
     "Plugin for the state observer");
- 
+
   std::string state_observer_param_plugin =
     get_parameter("state_observer_param_plugin").as_string();
   state_observer_plugin_name_ = get_parameter("state_observer_plugin").as_string();
