@@ -92,9 +92,11 @@ ActionObservedCostClient::ActionObservedCostClient(
     "state_observer_plugin", "state_observers::KalmanFilter",
     rclcpp::PARAMETER_STRING,
     "Plugin for the state observer");
+ 
   std::string state_observer_param_plugin =
     get_parameter("state_observer_param_plugin").as_string();
   state_observer_plugin_name_ = get_parameter("state_observer_plugin").as_string();
+
   state_observer_params_loader_.reset(
     new pluginlib::ClassLoader<state_observer::StateObserverParam>(
       "state_observers",
@@ -108,7 +110,8 @@ ActionObservedCostClient::ActionObservedCostClient(
       state_observer_params_loader_->createSharedInstance(
       "state_observer::KalmanFilterParam");
   } catch (pluginlib::PluginlibException & ex) {
-    std::cerr << "The plugin failed to load for some reason. Error: " << ex.what() << std::endl;
+    RCLCPP_ERROR(
+      get_logger(), "The plugin failed to load for some reason. Error: %s", ex.what());
   }
 
   if (!state_observer_loader_->isClassAvailable(state_observer_plugin_name_)) {
@@ -117,30 +120,6 @@ ActionObservedCostClient::ActionObservedCostClient(
       state_observer_plugin_name_.c_str());
     throw std::runtime_error("State Observer Class: %s is not available. Check the plugin name");
   }
-
-  // update_fluents_ = true;
-  // fluent_to_update_ = "move_duration";
-  // fluent_args_ = {0,1,2};
-
-  // auto action_name = get_action_name();
-  // std::vector<std::string> domain_durative_actions = domain_expert_->getDurativeActions();
-  // std::vector<std::string> domain_actions = domain_expert_->getActions();
-
-  // if(domain_durative_actions.find(action_name) != domain_durative_actions.end()) {
-  //   auto durative_action = domain_expert_->getDurativeAction(action_name, get_arguments());
-  //   for(const auto & param : durative_action->parameters) {
-  //     associated_arguments_[param.name] = {};
-  //   }
-  // }
-  // else if(domain_actions.find(action_name) != domain_actions.end()) {
-  //   auto action = domain_expert_->getAction(action_name, get_arguments());
-  //   for(const auto & param : action->parameters) {
-  //     associated_arguments_[param.name] = {};
-  //   }
-  // }
-  // else {
-  //   RCLCPP_ERROR(get_logger(), "Action %s not found in domain", action_name.c_str());
-  // }
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
@@ -155,6 +134,7 @@ ActionObservedCostClient::on_configure(const rclcpp_lifecycle::State & state)
   state_observer_params_->initialize(shared_from_this());
   return return_value;
 }
+
 std::string
 ActionObservedCostClient::get_arguments_hash()
 {
@@ -176,17 +156,17 @@ ActionObservedCostClient::finish(
   const double measured_action_cost)
 {
   RCLCPP_INFO(
-    get_logger(), "[ActionObservedCostClient] Action finished: %s",
+    get_logger(), "Action finished: %s",
     get_action_name().c_str());
   RCLCPP_INFO(
-    get_logger(), "[ActionObservedCostClient] Measured action cost %f", measured_action_cost);
+    get_logger(), "Measured action cost %f", measured_action_cost);
   Eigen::VectorXd residual(1);
   if (!action_cost_) {
     residual << measured_action_cost;
   } else {
     RCLCPP_INFO(get_logger(), "Nominal action cost %f", action_cost_->nominal_cost);
     residual << measured_action_cost - action_cost_->nominal_cost;
-    RCLCPP_INFO(get_logger(), "Residual %f", residual[0]);
+    RCLCPP_INFO(get_logger(), "Residual: %f", residual[0]);
   }
   auto arguments_hash = get_arguments_hash();
 
@@ -220,11 +200,9 @@ ActionObservedCostClient::finish(
     RCLCPP_INFO(get_logger(), "State %f", observed_action_cost_[arguments_hash]->get_state()[0]);
     RCLCPP_INFO(get_logger(), "Output %f", observed_action_cost_[arguments_hash]->get_output()[0]);
   }
-  RCLCPP_INFO(get_logger(), "Updated observer");
 
   std::string updated_fluent = "";
   if (update_fluents_) {
-    RCLCPP_INFO(get_logger(), "Update fluents");
     // check if arguments_hash is in observed_action_cost_
     if (observed_action_cost_.find(arguments_hash) == observed_action_cost_.end()) {
       RCLCPP_INFO(get_logger(), "Observer not found for arguments hash %s", arguments_hash.c_str());
@@ -238,13 +216,11 @@ ActionObservedCostClient::finish(
     }
     double updated_cost = observed_action_cost_[arguments_hash]->get_state()[0] +
       action_cost_->nominal_cost;
-    RCLCPP_INFO(get_logger(), "Ready to update cost");
     updated_fluent = update_fluent(updated_cost);
   }
 
 
   if (data_collection_ptr_) {
-    RCLCPP_INFO(get_logger(), "Data collection");
     // measured cost
     data_collection_ptr_->measured_action_cost.nominal_cost = measured_action_cost;
     // residual cost (observer state)
@@ -262,7 +238,6 @@ ActionObservedCostClient::finish(
     data_collection_ptr_->t_start = ActionExecutorClient::get_start_time();
     data_collection_ptr_->t_end = now();
     data_collection_pub_->publish(*data_collection_ptr_);
-    RCLCPP_INFO(get_logger(), "Published data collection");
   }
 
   if (save_updated_action_cost_) {
@@ -275,27 +250,17 @@ ActionObservedCostClient::finish(
     // Save updated fluents to the file
     save_updated_fluent(updated_fluent);
   }
-  RCLCPP_INFO(get_logger(), "Send father finish");
   ActionExecutorClient::finish(success, completion, status);
-  RCLCPP_INFO(get_logger(), "End finish");
+  RCLCPP_INFO(get_logger(), "Finish");
 }
-
-// void
-// ActionObservedCostClient::set_action_cost(const ActionCostPtr & action_cost,
-//                                           plansys2_msgs::msg::ActionExecution::SharedPtr msg)
-// {
-//   action_cost_ = action_cost;
-//   send_response(msg);
-// }
 
 void
 ActionObservedCostClient::send_response(
   const plansys2_msgs::msg::ActionExecution::SharedPtr msg)
 {
   RCLCPP_INFO(
-    get_logger(), "[ActionObservedCostClient] Action %s send_response",
-    get_action_name());
-  RCLCPP_INFO(get_logger(), "Computed nominal action cost: %f", action_cost_->nominal_cost);
+    get_logger(), "Action %s send response computed nominal cost: %f",
+    get_action_name().c_str(), action_cost_->nominal_cost);
 
   plansys2_msgs::msg::ActionExecution msg_resp(*msg);
   msg_resp.type = plansys2_msgs::msg::ActionExecution::RESPONSE;
@@ -308,14 +273,12 @@ ActionObservedCostClient::send_response(
     msg_resp.action_cost.nominal_cost = action_cost_->nominal_cost +
       observed_action_cost_[arguments_hash]->get_state()[0];
     msg_resp.action_cost.std_dev_cost =
-      observed_action_cost_[arguments_hash]->get_state_variance()[0];                                   // 0.0; // TODO: observed_action_cost_[arguments_hash]->get_state_variance()
+      observed_action_cost_[arguments_hash]->get_state_variance()[0];
   } else {
     msg_resp.action_cost = *action_cost_;
   }
   action_hub_pub_->publish(msg_resp);
 
-
-  RCLCPP_INFO(get_logger(), "Preparing data collection");
   data_collection_ptr_ = std::make_shared<plansys2_msgs::msg::ActionExecutionDataCollection>();
   data_collection_ptr_->action_execution = msg_resp;
   // nominal
@@ -323,38 +286,6 @@ ActionObservedCostClient::send_response(
   // estimated
   data_collection_ptr_->estimated_action_cost.nominal_cost = msg_resp.action_cost.nominal_cost;
   data_collection_ptr_->estimated_action_cost.std_dev_cost = msg_resp.action_cost.std_dev_cost;
-
-  auto funcs_0 = problem_expert_->getFunctions();
-
-  // std::string problem_str = problem_expert_->getProblem();
-  // RCLCPP_INFO(get_logger(), "Problem: %s", problem_str.c_str());
-  // RCLCPP_INFO(get_logger(), "--------------------------------");
-  // for(const auto & func : funcs_0) {
-  //   RCLCPP_INFO(get_logger(), "Function %s", func.name.c_str());
-  //   for(const auto & arg : func.parameters) {
-  //     RCLCPP_INFO(get_logger(), "Parameter %s", arg.name.c_str());
-  //   }
-  //   RCLCPP_INFO(get_logger(), "Value %f", func.value);
-  // }
-  // update_fluents(std::vector<double>{msg_resp.action_cost.nominal_cost});
-  auto funcs_1 = problem_expert_->getFunctions();
-  auto actio = domain_expert_->getActions();
-  for (const auto & func : funcs_1) {
-    // RCLCPP_INFO(get_logger(), "Function %s", func.name.c_str());
-    for (const auto & arg : func.parameters) {
-      // RCLCPP_INFO(get_logger(), "Parameter %s", arg.name.c_str());
-    }
-    // RCLCPP_INFO(get_logger(), "Value %f", func.value);
-  }
-  for (const auto & act : actio) {
-    // RCLCPP_INFO(get_logger(), "Action %s", act.c_str());
-  }
-  // auto domain = domain_expert_->getDomain();
-  // RCLCPP_INFO(get_logger(), "Domain %s", domain.c_str());
-  problem_expert_->getFunctions();
-
-  // plansys2::msg::ActionExecutionDataCollection data_collection;
-  // data_collection.action_execution = *msg_resp;
 
 }
 
@@ -399,13 +330,9 @@ ActionObservedCostClient::save_updated_fluent(const std::string & updated_fluent
   std::string search_string;
 
   if (std::regex_search(updated_fluent, match, re) && match.size() > 1) {
-    RCLCPP_INFO(get_logger(), "Match: %d", match.size());
-    for (int i = 0; i < match.size(); i++) {
-      RCLCPP_INFO(get_logger(), "Match %d: %s", i, match.str(i).c_str());
-    }
-    search_string = match.str(0);
+    search_string = match.str(0); // First match is (= (fluent args) value), second fluent args
   } else {
-    RCLCPP_WARN(get_logger(), "Warning: invalid updated_fluent format.");
+    RCLCPP_WARN(get_logger(), "Warning: invalid updated_fluent format. No match found.");
     return;
   }
   RCLCPP_INFO(get_logger(), "Search string: %s", search_string.c_str());
@@ -455,16 +382,6 @@ ActionObservedCostClient::save_updated_problem(const std::string & updated_probl
 {
   RCLCPP_INFO(get_logger(), "Updated problem: %s", updated_problem.c_str());
 
-  // Attempt to open the file for writing. This will create the file if it does not exist.
-  // std::ofstream outfile_problem(updated_problem_path_);
-  // RCLCPP_INFO(get_logger(), "Updated problem path: %s", updated_problem_path_.c_str());
-
-  // if (!std::filesystem::exists(updated_problem_path_)) {
-  //   RCLCPP_INFO(get_logger(), "File does not exist, creating file: %s", updated_problem_path_.c_str());
-  //   std::ofstream create_file(updated_problem_path_);
-  //   create_file.close();
-  // }
-
   // Now open the file for writing (this will overwrite the existing file)
   std::ofstream outfile_problem(updated_problem_path_);
   if (!outfile_problem) {
@@ -487,7 +404,6 @@ ActionObservedCostClient::should_execute(
   if (action != action_managed_) {
     return false;
   }
-  RCLCPP_INFO(get_logger(), "Action: %s", get_action_name().c_str());
 
   if (!specialized_arguments_.empty()) {
     for (const auto & specialized_arg : specialized_arguments_) {
@@ -501,7 +417,7 @@ ActionObservedCostClient::should_execute(
               args[0].c_str()) == associated_arguments_[specialized_arg].end())
           {
             RCLCPP_INFO(
-              get_logger(), "I [%s, %s] am not specialized for this args",
+              get_logger(), "Instance: %s, for action: %s am not specialized for this args",
               get_name(), get_action_name().c_str());
             return false;
           }
