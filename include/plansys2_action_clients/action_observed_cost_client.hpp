@@ -72,7 +72,6 @@ private:
   state_observer_params_loader_;
   state_observer::StateObserverParam::SharedPtr state_observer_params_;
   std::shared_ptr<pluginlib::ClassLoader<state_observer::StateObserver>> state_observer_loader_;
-  std::shared_ptr<state_observer::StateObserver> state_observer_;
   std::string state_observer_plugin_name_;
 
   // parameters
@@ -85,6 +84,8 @@ private:
   bool is_valid_path(const std::string & path_str);
   void save_updated_fluent(const std::string & updated_fluent);
   void save_updated_problem(const std::string & updated_problem);
+
+  std::shared_ptr<state_observer::StateObserver> load_state_observer();
 
 
   // plansys2::msg::ActionExecutionDataCollectionPtr data_collection_;

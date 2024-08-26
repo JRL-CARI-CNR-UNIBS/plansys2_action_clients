@@ -171,32 +171,16 @@ ActionObservedCostClient::finish(
   auto arguments_hash = get_arguments_hash();
 
   if (observed_action_cost_.find(arguments_hash) == observed_action_cost_.end()) {
-    std::shared_ptr<state_observer::StateObserver> state_observer;
-    try {
-      state_observer =
-        state_observer_loader_->createSharedInstance(
-        state_observer_plugin_name_);
-    } catch (pluginlib::PluginlibException & ex) {
-      RCLCPP_ERROR(
-        get_logger(), "The plugin: %s, failed to load for some reason. Error: %s", state_observer_plugin_name_,
-        ex.what());
-      throw std::runtime_error("The plugin failed to load for some reason.");
-    }
-
-    try {
-      state_observer->set_parameters(
-        state_observer_params_);
-    } catch (const std::exception & e) {
-      RCLCPP_ERROR(get_logger(), "Exception caught in state observer set_parameters: %s", e.what());
-      throw std::runtime_error("The plugin failed to set parameters.");
-    }
-
-    observed_action_cost_[arguments_hash] = state_observer;
-    observed_action_cost_[arguments_hash]->initialize(residual);
-    RCLCPP_INFO(get_logger(), "Initialized observer");
+    RCLCPP_WARN(get_logger(), "Observer not found for arguments hash %s", arguments_hash.c_str());
+    observed_action_cost_[arguments_hash] = load_state_observer();
   } else {
-    observed_action_cost_[arguments_hash]->update(residual);
-    RCLCPP_INFO(get_logger(), "Updated observer");
+    if (observed_action_cost_[arguments_hash]->is_initialized()) {
+      observed_action_cost_[arguments_hash]->update(residual);
+      RCLCPP_INFO(get_logger(), "Updated observer");
+    } else {
+      observed_action_cost_[arguments_hash]->initialize(residual);
+      RCLCPP_INFO(get_logger(), "Observer initialized");
+    }
     RCLCPP_INFO(get_logger(), "State %f", observed_action_cost_[arguments_hash]->get_state()[0]);
     RCLCPP_INFO(get_logger(), "Output %f", observed_action_cost_[arguments_hash]->get_output()[0]);
   }
@@ -206,7 +190,6 @@ ActionObservedCostClient::finish(
     // check if arguments_hash is in observed_action_cost_
     if (observed_action_cost_.find(arguments_hash) == observed_action_cost_.end()) {
       RCLCPP_INFO(get_logger(), "Observer not found for arguments hash %s", arguments_hash.c_str());
-
     }
     //check dim of get_state()
     if (action_cost_) {
@@ -275,7 +258,16 @@ ActionObservedCostClient::send_response(
     msg_resp.action_cost.std_dev_cost =
       observed_action_cost_[arguments_hash]->get_state_variance()[0];
   } else {
+
+    observed_action_cost_[arguments_hash] = load_state_observer();
+
     msg_resp.action_cost = *action_cost_;
+    try {
+      msg_resp.action_cost.std_dev_cost =
+        observed_action_cost_[arguments_hash]->get_state_variance()[0];
+    } catch (const std::exception & e) {
+      RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
+    }
   }
   action_hub_pub_->publish(msg_resp);
 
@@ -435,6 +427,32 @@ ActionObservedCostClient::should_execute(
     get_logger(), "I [%s, %s] am specialized for this args",
     get_name(), get_action_name().c_str());
   return true;
+}
+
+std::shared_ptr<state_observer::StateObserver>
+ActionObservedCostClient::load_state_observer()
+{
+  std::shared_ptr<state_observer::StateObserver> state_observer;
+  try {
+    state_observer =
+      state_observer_loader_->createSharedInstance(
+      state_observer_plugin_name_);
+  } catch (pluginlib::PluginlibException & ex) {
+    RCLCPP_ERROR(
+      get_logger(), "The plugin: %s, failed to load for some reason. Error: %s", state_observer_plugin_name_,
+      ex.what());
+    throw std::runtime_error("The plugin failed to load for some reason.");
+  }
+
+  try {
+    state_observer->set_parameters(
+      state_observer_params_);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Exception caught in state observer set_parameters: %s", e.what());
+    throw std::runtime_error("The plugin failed to set parameters.");
+  }
+
+  return state_observer;
 }
 
 }  // namespace plansys2_actions_clients
