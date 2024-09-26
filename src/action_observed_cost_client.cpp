@@ -108,7 +108,7 @@ ActionObservedCostClient::ActionObservedCostClient(
   try {
     state_observer_params_ =
       state_observer_params_loader_->createSharedInstance(
-      "state_observer::KalmanFilterParam");
+     state_observer_param_plugin);
   } catch (pluginlib::PluginlibException & ex) {
     RCLCPP_ERROR(
       get_logger(), "The plugin failed to load for some reason. Error: %s", ex.what());
@@ -255,8 +255,13 @@ ActionObservedCostClient::send_response(
     msg_resp.action_cost = plansys2_msgs::msg::ActionCost();
     msg_resp.action_cost.nominal_cost = action_cost_->nominal_cost +
       observed_action_cost_[arguments_hash]->get_state()[0];
-    msg_resp.action_cost.std_dev_cost =
-      observed_action_cost_[arguments_hash]->get_state_variance()[0];
+    try {
+      msg_resp.action_cost.std_dev_cost =
+        observed_action_cost_[arguments_hash]->get_state_variance()[0];
+    } catch (const std::exception & e) {
+      msg_resp.action_cost.std_dev_cost = 0.0; 
+      RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
+    }
   } else {
 
     observed_action_cost_[arguments_hash] = load_state_observer();
@@ -266,6 +271,7 @@ ActionObservedCostClient::send_response(
       msg_resp.action_cost.std_dev_cost =
         observed_action_cost_[arguments_hash]->get_state_variance()[0];
     } catch (const std::exception & e) {
+      msg_resp.action_cost.std_dev_cost = 0.0; 
       RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
     }
   }
