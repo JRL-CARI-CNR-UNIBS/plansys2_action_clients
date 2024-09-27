@@ -23,8 +23,6 @@
 
 #include "plansys2_executor/ActionExecutorClient.hpp"
 #include "plansys2_msgs/msg/action_execution_data_collection.hpp"
-#include "state_observers/luenberger.hpp"
-#include "state_observers/kalman_filter.hpp"
 #include "state_observers/state_observer.hpp"
 #include "pluginlib/class_loader.hpp"
 
