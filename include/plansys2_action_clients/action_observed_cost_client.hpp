@@ -23,8 +23,10 @@
 
 #include "plansys2_executor/ActionExecutorClient.hpp"
 #include "plansys2_msgs/msg/action_execution_data_collection.hpp"
+#include "plansys2_msgs/srv/affect_node_info.hpp"
 #include "state_observers/state_observer.hpp"
 #include "pluginlib/class_loader.hpp"
+#include "rclcpp/executor.hpp"
 
 namespace plansys2_actions_clients
 {
@@ -37,12 +39,9 @@ public:
     const std::string & node_name,
     const std::chrono::nanoseconds & rate);
 
-  // void finish(bool success, float completion, const std::string & status) override;
   void finish(
     bool success, float completion, const std::string & status,
-    const double measured_action_cost);
-  // void set_action_cost(const ActionCostPtr & action_cost,
-  //                       const plansys2_msgs::msg::ActionExecution::SharedPtr msg);
+    const double measured_action_cost); // override?
 
 protected:
   std::map<std::string, std::vector<std::string>> associated_arguments_;
@@ -50,10 +49,10 @@ protected:
   void send_response(const plansys2_msgs::msg::ActionExecution::SharedPtr msg) override;
   std::string get_arguments_hash();
   std::string update_fluent(const double & fluents_value);
+  std::string update_fluent_string(const double & fluents_value);
+
   bool should_execute(const std::string & action, const std::vector<std::string> & args);
 
-  // using CallbackReturnT =
-  //   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_configure(const rclcpp_lifecycle::State & state);
 
@@ -61,8 +60,15 @@ private:
   // data collections
   using ActionExecutionDataCollection = plansys2_msgs::msg::ActionExecutionDataCollection;
   using ActionExecutionDataCollectionPtr = std::shared_ptr<ActionExecutionDataCollection>;
+  using AffectNodeInfo = plansys2_msgs::srv::AffectNodeInfo;
+  
+
   ActionExecutionDataCollectionPtr data_collection_ptr_;
   rclcpp::Publisher<ActionExecutionDataCollection>::SharedPtr data_collection_pub_;
+  rclcpp::Client<AffectNodeInfo>::SharedPtr update_knowledge_base_client_;
+  rclcpp::Node::SharedPtr async_internal_node_;
+  rclcpp::executors::SingleThreadedExecutor::SharedPtr async_internal_executor_;
+  
   std::shared_ptr<plansys2::ProblemExpertClient> problem_expert_;
   std::shared_ptr<plansys2::DomainExpertClient> domain_expert_;
   // state observer stuff
@@ -73,8 +79,8 @@ private:
   std::string state_observer_plugin_name_;
 
   // parameters
-  bool save_updated_action_cost_, update_fluents_;
-  std::string fluent_to_update_;  // In future could be a vector of fluents
+  bool save_updated_action_cost_, update_fluents_, update_knowledge_base_;
+  std::string fluent_to_update_;  
   std::vector<long int> fluent_args_;
 
   std::string updated_fluents_path_;
@@ -85,8 +91,6 @@ private:
 
   std::shared_ptr<state_observer::StateObserver> load_state_observer();
 
-
-  // plansys2::msg::ActionExecutionDataCollectionPtr data_collection_;
 };
 
 }  // namespace plansys2_actions_clients

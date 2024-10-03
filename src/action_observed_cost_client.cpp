@@ -17,6 +17,8 @@
 namespace plansys2_actions_clients
 {
 
+using namespace std::chrono_literals;
+
 ActionObservedCostClient::ActionObservedCostClient(
   const std::string & node_name,
   const std::chrono::nanoseconds & rate)
@@ -47,6 +49,9 @@ ActionObservedCostClient::ActionObservedCostClient(
     "update_fluent", false, rclcpp::PARAMETER_BOOL,
     "Update fluent after action execution");
   fully_declare_parameter(
+    "update_knowledge_base", false, rclcpp::PARAMETER_BOOL,
+    "Update knowledge base after action execution");
+  fully_declare_parameter(
     "save_updated_action_cost", false, rclcpp::PARAMETER_BOOL,
     "Save the action cost even if it is not updated");
   fully_declare_parameter(
@@ -67,6 +72,7 @@ ActionObservedCostClient::ActionObservedCostClient(
   get_parameter("updated_fluents_path", updated_fluents_path_);
   get_parameter("updated_problem_path", updated_problem_path_);
   get_parameter("update_fluent", update_fluents_);
+  get_parameter("update_knowledge_base", update_knowledge_base_);
 
   if (!is_valid_path(updated_fluents_path_)) {
     RCLCPP_WARN(get_logger(), "Invalid path %s", updated_fluents_path_.c_str());
@@ -119,6 +125,21 @@ ActionObservedCostClient::ActionObservedCostClient(
       get_logger(), "State Observer Class: %s is not available",
       state_observer_plugin_name_.c_str());
     throw std::runtime_error("State Observer Class: %s is not available. Check the plugin name");
+  }
+
+  // Update knowledge base client
+  async_internal_node_ = std::make_shared<rclcpp::Node>(
+    "_async_internal_node_" + std::string(get_name()));
+    
+  async_internal_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+  async_internal_executor_-> add_node(async_internal_node_);
+  if(update_knowledge_base_)
+  {
+    update_knowledge_base_client_ = async_internal_node_->create_client<AffectNodeInfo>(
+    "/update_knowledge");
+    if (!update_knowledge_base_client_->wait_for_service(1s)) {
+      RCLCPP_WARN(get_logger(), "Service: update_knowledge is not available. KB will not be updated");
+    }
   }
 }
 
@@ -199,7 +220,41 @@ ActionObservedCostClient::finish(
     }
     double updated_cost = observed_action_cost_[arguments_hash]->get_state()[0] +
       action_cost_->nominal_cost;
-    updated_fluent = update_fluent(updated_cost);
+    std::string updated_fluent_string = update_fluent_string(updated_cost);
+    RCLCPP_INFO(get_logger(), "Update fluent: %s", updated_fluent_string.c_str());
+    plansys2::Function updated_fluent = plansys2::Function(updated_fluent_string);
+    if(!problem_expert_->updateFunction(updated_fluent))
+    {
+      RCLCPP_WARN(get_logger(), "Error updating fluent");
+    }
+
+    if(update_knowledge_base_)
+    {
+      auto update_knowledge_request = std::make_shared<AffectNodeInfo::Request>();
+      update_knowledge_request->node = updated_fluent;
+      try{
+        update_knowledge_request->value = observed_action_cost_[arguments_hash]->get_state_variance()[0];
+        update_knowledge_request->additional_info = "variance";
+      } catch (const std::exception & e) {
+        RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
+      }
+      auto future_result = update_knowledge_base_client_->async_send_request(update_knowledge_request);
+      rclcpp::FutureReturnCode status = async_internal_executor_->spin_until_future_complete(future_result, std::chrono::seconds(5));
+      if(status != rclcpp::FutureReturnCode::SUCCESS)
+      {
+        RCLCPP_WARN(
+          get_logger(), "Error updating knowledge base: %s",
+          update_knowledge_base_client_->get_service_name());
+      }
+      auto result = *future_result.get();
+
+      if (!result.success) {
+        RCLCPP_WARN_STREAM(
+          get_logger(),
+          update_knowledge_base_client_->get_service_name() << ": " <<
+            result.error_info);
+      }
+    }
   }
 
 
@@ -212,7 +267,7 @@ ActionObservedCostClient::finish(
     // std dev cost (observer variance), if available by the observer
     try {
       data_collection_ptr_->residual_action_cost.std_dev_cost =
-        observed_action_cost_[arguments_hash]->get_state_variance()[0];
+        std::sqrt(observed_action_cost_[arguments_hash]->get_state_variance()[0]);
       RCLCPP_INFO(
         get_logger(), "Variance %f", observed_action_cost_[arguments_hash]->get_state_variance());
     } catch (const std::exception & e) {
@@ -257,7 +312,7 @@ ActionObservedCostClient::send_response(
       observed_action_cost_[arguments_hash]->get_state()[0];
     try {
       msg_resp.action_cost.std_dev_cost =
-        observed_action_cost_[arguments_hash]->get_state_variance()[0];
+        std::sqrt(observed_action_cost_[arguments_hash]->get_state_variance()[0]);
     } catch (const std::exception & e) {
       msg_resp.action_cost.std_dev_cost = 0.0;
       RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
@@ -269,7 +324,7 @@ ActionObservedCostClient::send_response(
     msg_resp.action_cost = *action_cost_;
     try {
       msg_resp.action_cost.std_dev_cost =
-        observed_action_cost_[arguments_hash]->get_state_variance()[0];
+        std::sqrt(observed_action_cost_[arguments_hash]->get_state_variance()[0]);
     } catch (const std::exception & e) {
       msg_resp.action_cost.std_dev_cost = 0.0;
       RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
@@ -285,6 +340,24 @@ ActionObservedCostClient::send_response(
   data_collection_ptr_->estimated_action_cost.nominal_cost = msg_resp.action_cost.nominal_cost;
   data_collection_ptr_->estimated_action_cost.std_dev_cost = msg_resp.action_cost.std_dev_cost;
 
+}
+
+std::string
+ActionObservedCostClient::update_fluent_string(const double & fluent_value)
+{
+  auto args = get_arguments();
+
+  std::string fluent_string = "(= (" + fluent_to_update_ + " ";
+
+  for (const auto & arg : fluent_args_) {
+    if (arg < args.size()) {
+      fluent_string += args[arg] + " ";
+    } else {
+      RCLCPP_INFO(get_logger(), "Error: arg %d not found in args", arg);
+    }
+  }
+  fluent_string += ") " + std::to_string(fluent_value) + ")";
+  return fluent_string;
 }
 
 std::string
