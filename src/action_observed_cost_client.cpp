@@ -130,15 +130,16 @@ ActionObservedCostClient::ActionObservedCostClient(
   // Update knowledge base client
   async_internal_node_ = std::make_shared<rclcpp::Node>(
     "_async_internal_node_" + std::string(get_name()));
-    
+
   async_internal_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-  async_internal_executor_-> add_node(async_internal_node_);
-  if(update_knowledge_base_)
-  {
+  async_internal_executor_->add_node(async_internal_node_);
+  if (update_knowledge_base_) {
     update_knowledge_base_client_ = async_internal_node_->create_client<AffectNodeInfo>(
-    "/update_knowledge");
+      "/update_knowledge");
     if (!update_knowledge_base_client_->wait_for_service(1s)) {
-      RCLCPP_WARN(get_logger(), "Service: update_knowledge is not available. KB will not be updated");
+      RCLCPP_WARN(
+        get_logger(),
+        "Service: update_knowledge is not available. KB will not be updated");
     }
   }
 }
@@ -223,25 +224,25 @@ ActionObservedCostClient::finish(
     std::string updated_fluent_string = update_fluent_string(updated_cost);
     RCLCPP_INFO(get_logger(), "Update fluent: %s", updated_fluent_string.c_str());
     plansys2::Function updated_fluent = plansys2::Function(updated_fluent_string);
-    if(!problem_expert_->updateFunction(updated_fluent))
-    {
+    if (!problem_expert_->updateFunction(updated_fluent)) {
       RCLCPP_WARN(get_logger(), "Error updating fluent");
     }
 
-    if(update_knowledge_base_)
-    {
+    if (update_knowledge_base_) {
       auto update_knowledge_request = std::make_shared<AffectNodeInfo::Request>();
       update_knowledge_request->node = updated_fluent;
-      try{
-        update_knowledge_request->value = observed_action_cost_[arguments_hash]->get_state_variance()[0];
+      try {
+        update_knowledge_request->value =
+          observed_action_cost_[arguments_hash]->get_state_variance()[0];
         update_knowledge_request->additional_info = "variance";
       } catch (const std::exception & e) {
         RCLCPP_INFO(get_logger(), "This state observer does not provide state variance");
       }
-      auto future_result = update_knowledge_base_client_->async_send_request(update_knowledge_request);
-      rclcpp::FutureReturnCode status = async_internal_executor_->spin_until_future_complete(future_result, std::chrono::seconds(5));
-      if(status != rclcpp::FutureReturnCode::SUCCESS)
-      {
+      auto future_result = update_knowledge_base_client_->async_send_request(
+        update_knowledge_request);
+      rclcpp::FutureReturnCode status = async_internal_executor_->spin_until_future_complete(
+        future_result, std::chrono::seconds(5));
+      if (status != rclcpp::FutureReturnCode::SUCCESS) {
         RCLCPP_WARN(
           get_logger(), "Error updating knowledge base: %s",
           update_knowledge_base_client_->get_service_name());

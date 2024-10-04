@@ -61,14 +61,14 @@ private:
   using ActionExecutionDataCollection = plansys2_msgs::msg::ActionExecutionDataCollection;
   using ActionExecutionDataCollectionPtr = std::shared_ptr<ActionExecutionDataCollection>;
   using AffectNodeInfo = plansys2_msgs::srv::AffectNodeInfo;
-  
+
 
   ActionExecutionDataCollectionPtr data_collection_ptr_;
   rclcpp::Publisher<ActionExecutionDataCollection>::SharedPtr data_collection_pub_;
   rclcpp::Client<AffectNodeInfo>::SharedPtr update_knowledge_base_client_;
   rclcpp::Node::SharedPtr async_internal_node_;
   rclcpp::executors::SingleThreadedExecutor::SharedPtr async_internal_executor_;
-  
+
   std::shared_ptr<plansys2::ProblemExpertClient> problem_expert_;
   std::shared_ptr<plansys2::DomainExpertClient> domain_expert_;
   // state observer stuff
@@ -80,7 +80,7 @@ private:
 
   // parameters
   bool save_updated_action_cost_, update_fluents_, update_knowledge_base_;
-  std::string fluent_to_update_;  
+  std::string fluent_to_update_;
   std::vector<long int> fluent_args_;
 
   std::string updated_fluents_path_;
